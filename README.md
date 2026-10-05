@@ -96,7 +96,7 @@ npm install
 npm run demo
 ```
 
-Open http://localhost:3000. A demo admin is created on start: `admin@example.com` / `Admin#Demo2026`. You can register users, set up TOTP 2FA and recovery codes, see the admin pages and the user directory, and request upload SAS URLs.
+Open http://localhost:3000. A demo admin is created on start: `admin@example.com` / `Admin#Demo2026`. You can register users, set up TOTP 2FA and recovery codes, see the admin pages and the user directory, and upload files. Uploads go to a fake blob store held in memory, so they disappear when the server stops.
 
 This demonstrates the application logic only. Front Door, the WAF, TDE, Managed Identity and Log Analytics exist only in Azure. See `infra/` and `/Documentation` for those.
 

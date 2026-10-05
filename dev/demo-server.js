@@ -159,6 +159,64 @@ Module._load = function (request, parent, isMain) {
   return realLoad.apply(this, arguments);
 };
 
+// ------------------------------------------------------------ fake blob storage
+// The browser uploads straight to the SAS URL. In the demo that URL points back at
+// this server, which keeps the uploaded files in memory.
+const blobs = new Map();
+const MAX_DEMO_UPLOAD = 10 * 1024 * 1024;
+
+function demoBlobMiddleware(req, res, next) {
+  // Point SAS URLs at this server instead of Azure.
+  if (req.method === 'GET' && req.path === '/api/getSasToken') {
+    const realJson = res.json.bind(res);
+    res.json = body => {
+      if (body && typeof body.sasUrl === 'string') {
+        body.sasUrl = body.sasUrl.replace(
+          /^https:\/\/[^/]+\.blob\.core\.windows\.net\//,
+          `${req.protocol}://${req.headers.host}/demo-blob/`
+        );
+      }
+      return realJson(body);
+    };
+    return next();
+  }
+  if (!req.path.startsWith('/demo-blob/')) return next();
+
+  const key = decodeURIComponent(req.path.replace('/demo-blob/', ''));
+  if (req.method === 'PUT') {
+    const chunks = [];
+    let size = 0;
+    req.on('data', c => {
+      size += c.length;
+      if (size > MAX_DEMO_UPLOAD) { res.status(413).end(); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      blobs.set(key, { data: Buffer.concat(chunks), type: req.headers['content-type'] || 'application/octet-stream' });
+      console.log(`[demo blob] stored ${key} (${size} bytes)`);
+      res.status(201).end();
+    });
+    return;
+  }
+  if (req.method === 'GET' && req.path === '/demo-blob/') {
+    return res.json([...blobs.entries()].map(([name, b]) => ({ name, bytes: b.data.length, type: b.type })));
+  }
+  return res.status(405).end();
+}
+
+const realExpress = require('express');
+function demoExpress() {
+  const app = realExpress();
+  app.use(demoBlobMiddleware);
+  return app;
+}
+Object.assign(demoExpress, realExpress);
+const baseLoad = Module._load;
+Module._load = function (request) {
+  if (request === 'express') return demoExpress;
+  return baseLoad.apply(this, arguments);
+};
+
 seedAdmin();
 console.log('[demo] In-memory database ready. Demo admin: admin@example.com / Admin#Demo2026');
 require(path.join(__dirname, '..', 'index.js'));
