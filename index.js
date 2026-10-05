@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 // Import handlers & routers
 const checkAdminHandler = require('./checkAdmin');
 const getSasTokenHandler = require('./getSasToken');
+const verifyUploadHandler = require('./verifyUpload');
 const usersRouter = require('./users');
 const twoFARouter = require('./2fa');
 const registerRouter = require('./register'); 
@@ -83,6 +84,7 @@ app.get('/api/checkAdmin', checkAdminHandler.handler);
 app.post('/api/checkAdmin', checkAdminHandler.handler);
 
 app.get('/api/getSasToken', getSasTokenHandler.handler);
+app.post('/api/verifyUpload', verifyUploadHandler.handler);
 app.options('/api/getSasToken', (req, res) => {
   // Updated CORS for specific routes too
   const allowedOrigins = ['https://maanitwebapp.com', 'http://localhost:3000'];
@@ -106,6 +108,9 @@ app.use('/api', usersRouter);
 // === Protected Admin Pages ===
 app.get('/admin.html', requireAdminDb, (req, res) => {
  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+app.get('/security.html', requireAdminDb, (req, res) => {
+ res.sendFile(path.join(__dirname, 'public', 'security.html'));
 });
 app.get('/users.html', requireAdminDb, (req, res) => {
  res.sendFile(path.join(__dirname, 'public', 'users.html'));

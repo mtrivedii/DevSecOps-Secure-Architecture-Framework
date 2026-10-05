@@ -151,7 +151,17 @@ Module._load = function (request, parent, isMain) {
     const real = realLoad.apply(this, arguments);
     class DemoBlobServiceClient {
       getContainerClient() {
-        return { exists: async () => true, create: async () => {}, setAccessPolicy: async () => {} };
+        return {
+          exists: async () => true, create: async () => {}, setAccessPolicy: async () => {},
+          getBlobClient: rawName => { const name = `secure-uploads/${rawName}`; return {
+            download: async (offset, count) => {
+              const b = blobs.get(name);
+              if (!b) { const e = new Error('not found'); e.statusCode = 404; throw e; }
+              return { readableStreamBody: require('stream').Readable.from([b.data.subarray(offset, offset + count)]) };
+            },
+            deleteIfExists: async () => blobs.delete(name)
+          }; }
+        };
       }
     }
     return { ...real, BlobServiceClient: DemoBlobServiceClient };

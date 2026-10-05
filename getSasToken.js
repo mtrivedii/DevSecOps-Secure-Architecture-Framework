@@ -1,6 +1,7 @@
 const { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } = require("@azure/storage-blob");
 const jwt = require('jsonwebtoken');
-const path = require('path');
+const securityLog = require('./securityLog');
+const uploadRules = require('./uploadRules');
 
 async function handler(req, res) {
   try {
@@ -35,34 +36,11 @@ async function handler(req, res) {
       return res.status(400).json({ error: "Missing or invalid blobName query parameter" });
     }
 
-    // Block script files by extension
-    const fileExtension = path.extname(blobName).toLowerCase();
-    const blockedExtensions = [
-      '.js', '.jsx', '.ts', '.tsx', '.php', '.asp', '.aspx',
-      '.cgi', '.pl', '.py', '.sh', '.bat', '.cmd', '.ps1',
-      '.vbs', '.vbe', '.jsp', '.html', '.htm', '.exe'
-    ];
-
-    if (blockedExtensions.includes(fileExtension)) {
-      console.log(`Blocked upload of script file: ${blobName}`);
-      return res.status(403).json({ error: "Script files are not allowed" });
-    }
-
-    // Block script content types
-    const contentType = req.query.contentType;
-    const blockedContentTypes = [
-      'application/javascript',
-      'text/javascript',
-      'application/x-javascript',
-      'text/html',
-      'application/xhtml+xml',
-      'text/php',
-      'application/x-httpd-php'
-    ];
-
-    if (contentType && blockedContentTypes.includes(contentType)) {
-      console.log(`Blocked upload with script content type: ${contentType}`);
-      return res.status(403).json({ error: "Script content types are not allowed" });
+    // Only file types on the allowlist may be uploaded (see uploadRules.js).
+    const check = uploadRules.checkRequest(blobName, req.query.contentType);
+    if (!check.ok) {
+      securityLog.record('upload.blocked', { req, detail: `${check.reason}: ${String(blobName).slice(0, 80)}`, severity: 'warning' });
+      return res.status(403).json({ error: check.reason });
     }
 
     // Sanitize the filename
@@ -107,6 +85,7 @@ async function handler(req, res) {
       protocol: "https"
     }, sharedKeyCredential).toString();
 
+    securityLog.record('upload.url_issued', { req, detail: safeFileName.slice(0, 80) });
     const sasUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${encodeURIComponent(safeFileName)}?${sasToken}`;
     return res.status(200).json({
       sasUrl,

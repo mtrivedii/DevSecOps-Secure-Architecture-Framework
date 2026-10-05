@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Security Events</title>
+  <link rel="stylesheet" href="style.css">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Security Events</h1>
+    <p>Recent sign-in, 2FA, upload and access events. Kept in memory on this server instance only (the last 500); every event is also written to the application log. Alerts are raised when one address causes 5 failed sign-in or 2FA attempts in 10 minutes.</p>
+    <p><a href="/admin.html" class="button">Back to admin</a> <button id="refresh" class="button" type="button">Refresh</button></p>
+    <p id="status"></p>
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>Severity</th><th>Address</th><th>Account</th><th>Detail</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <script src="js/security.js"></script>
+</body>
+</html>

@@ -72,12 +72,13 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Enhanced SAS token request
-  async function getSasToken(filename) {
+  async function getSasToken(filename, contentType) {
     try {
       // Important: Use your actual backend URL, not a relative path
       // This avoids CORS issues with AAD authentication
       const baseUrl = window.location.origin;
-      const apiUrl = `${baseUrl}/api/getSasToken?blobName=${encodeURIComponent(filename)}`;
+      const apiUrl = `${baseUrl}/api/getSasToken?blobName=${encodeURIComponent(filename)}` +
+        (contentType ? `&contentType=${encodeURIComponent(contentType)}` : '');
       
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -131,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     try {
       // Request SAS token
-      const data = await getSasToken(file.name);
+      const data = await getSasToken(file.name, file.type);
       const sasUrl = data.sasUrl;
       
       uploadMessage.textContent = 'Uploading file...';
@@ -183,6 +184,20 @@ document.addEventListener('DOMContentLoaded', function() {
       // Wait for upload to complete
       await uploadPromise;
       
+      // Ask the server to check the file's content now that it is stored
+      uploadMessage.textContent = 'Checking file...';
+      const verify = await fetch('/api/verifyUpload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ blobName: data.storedName })
+      });
+      if (!verify.ok) {
+        let reason = 'File check failed';
+        try { reason = (await verify.json()).error || reason; } catch (e) { /* keep default */ }
+        throw new Error('Upload rejected: ' + reason);
+      }
+
       // Show success message
       uploadMessage.textContent = 'Upload successful!';
       uploadMessage.className = 'success';
