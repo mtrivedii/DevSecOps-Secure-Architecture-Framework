@@ -62,32 +62,8 @@
       }
     }
 
-    // --- Admin check snippet integration ---
-    function renderAdminContent() {
-      debugLog('Rendering admin content');
-      const messageDiv = document.getElementById('loginMessage');
-      messageDiv.className = 'message success';
-      messageDiv.style.display = 'block';
-    }
- 
-    // --- End admin check snippet integration ---
-
     document.addEventListener('DOMContentLoaded', function() {
       debugLog('Login page loaded');
-
-      // --- Admin check snippet as requested ---
-      fetch('/api/checkAdmin', {
-        credentials: 'include' // Include cookies
-      })
-      .then(response => {
-        if (response.ok) {
-          renderAdminContent();
-        } else {
-          renderUnauthorizedView();
-        }
-      })
-      .catch(err => renderUnauthorizedView());
-      // --- End admin check snippet ---
 
       const form = document.getElementById('loginForm');
       const messageDiv = document.getElementById('loginMessage');

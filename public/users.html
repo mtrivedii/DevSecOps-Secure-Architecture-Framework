@@ -114,8 +114,96 @@
       loaded: false
     };
     
-    // Rest of your users.html code remains the same
-    // ...
+    // Load users from the API. The server checks the admin session cookie.
+    async function loadUsers() {
+      const usersDiv = document.getElementById('users');
+      try {
+        const response = await fetch('/api/users', { credentials: 'include' });
+        if (response.status === 401 || response.status === 403) {
+          usersDiv.textContent = 'You do not have permission to view users.';
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+        state.users = await response.json();
+        state.loaded = true;
+        state.currentPage = 1;
+        wireUserControls();
+        applyUserFilters();
+      } catch (err) {
+        usersDiv.textContent = 'Could not load users. Please try again.';
+        console.error('Error loading users:', err.message);
+      }
+    }
+
+    function wireUserControls() {
+      if (state.wired) return;
+      state.wired = true;
+      document.getElementById('searchInput').addEventListener('input', () => {
+        state.currentPage = 1;
+        applyUserFilters();
+      });
+      document.getElementById('roleFilter').addEventListener('change', () => {
+        state.currentPage = 1;
+        applyUserFilters();
+      });
+      document.getElementById('prevPage').addEventListener('click', () => {
+        if (state.currentPage > 1) { state.currentPage--; renderUsers(); }
+      });
+      document.getElementById('nextPage').addEventListener('click', () => {
+        const pages = Math.max(1, Math.ceil(state.filteredUsers.length / state.itemsPerPage));
+        if (state.currentPage < pages) { state.currentPage++; renderUsers(); }
+      });
+      document.getElementById('refreshButton').addEventListener('click', loadUsers);
+    }
+
+    function applyUserFilters() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const role = document.getElementById('roleFilter').value.toLowerCase();
+      state.filteredUsers = state.users.filter(u =>
+        (!search || String(u.email || '').toLowerCase().includes(search)) &&
+        (!role || String(u.role || '').toLowerCase() === role)
+      );
+      renderUsers();
+    }
+
+    // Build the table with textContent so user data is never parsed as HTML.
+    function renderUsers() {
+      const usersDiv = document.getElementById('users');
+      const pagination = document.getElementById('pagination');
+      usersDiv.textContent = '';
+
+      if (state.filteredUsers.length === 0) {
+        usersDiv.textContent = 'No users found.';
+        pagination.style.display = 'none';
+        return;
+      }
+
+      const pages = Math.max(1, Math.ceil(state.filteredUsers.length / state.itemsPerPage));
+      state.currentPage = Math.min(state.currentPage, pages);
+      const start = (state.currentPage - 1) * state.itemsPerPage;
+      const rows = state.filteredUsers.slice(start, start + state.itemsPerPage);
+
+      const table = document.createElement('table');
+      const head = table.createTHead().insertRow();
+      ['ID', 'Email', 'Role'].forEach(label => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        head.appendChild(th);
+      });
+      const body = table.createTBody();
+      rows.forEach(u => {
+        const tr = body.insertRow();
+        [u.id, u.email, u.role].forEach(value => {
+          tr.insertCell().textContent = value == null ? '' : String(value);
+        });
+      });
+      usersDiv.appendChild(table);
+
+      document.getElementById('pageInfo').textContent = `Page ${state.currentPage} of ${pages}`;
+      pagination.style.display = pages <= 1 ? 'none' : '';
+    }
   </script>
 </body>
 </html>
