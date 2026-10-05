@@ -77,10 +77,8 @@ router.get('/users', requireAdminSession, async (req, res) => {
       FROM dbo.users
     `;
     
-    console.log('Executing users query:', query);
     const result = await pool.request().query(query);
     
-    console.log('Query successful, returned', result.recordset.length, 'rows');
     
     // Map results to expected format
     const sanitizedUsers = result.recordset.map(user => ({

@@ -108,7 +108,6 @@ router.post('/login', rateLimit, async (req, res) => {
     }
     
     const user = result.recordset[0];
-    console.log(`[LOGIN] User found: ${user.email}, Role: ${user.Role}, Status: ${user.status}, 2FA Enabled: ${user.twoFactorEnabled}`);
     
     if (user.status !== 'Active') {
       securityLog.record('login.failure', { req, email: user.email, userId: user.id, detail: `account status ${user.status}`, severity: 'medium' });
@@ -162,7 +161,6 @@ router.post('/login', rateLimit, async (req, res) => {
       sameSite: 'lax',
       path: '/'
     });
-    console.log(`[LOGIN] auth_token cookie set for user: ${user.email}`);
     
     // Update last login timestamp
     try {
@@ -219,7 +217,7 @@ function trackUserLoginAttempts(email) {
   attemptsData.count++;
   userSpecificLoginAttempts.set(email, attemptsData);
   
-  console.log(`[SECURITY] Failed login attempt ${attemptsData.count} for user ${email}.`);
+  console.log(`[SECURITY] Failed login attempt ${attemptsData.count} for user ${securityLog.maskEmail(email)}.`);
 
   // Consider account locking or notification after several failed attempts (e.g., 5-10)
   if (attemptsData.count >= 10) { // Example: lock after 10 attempts

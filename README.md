@@ -32,9 +32,15 @@ A secure, full-stack web application deployed on Microsoft Azure, built as part 
 
 ### File Upload
 - SAS token-based uploads directly to Azure Blob Storage (storage keys never exposed to client)
-- Server-side file extension and MIME type validation with blocklist
+- Server-side allowlist of file extensions with a matching content type check, plus a content check after upload (see findings table for its limits)
 - Filename sanitisation to prevent path traversal
 - Time-limited, write-only SAS tokens (1-hour expiry)
+
+### Security event log
+- Sign-in, 2FA, registration, upload and admin-access events are recorded with the source address and a masked email (never passwords or codes)
+- Admins see the latest events at `/security.html`; every event is also written to the application log as a JSON line for Log Analytics
+- Alert rule: 5 failed sign-in or 2FA attempts from one address in 10 minutes raises an `alert.brute_force` event
+- The page reads an in-memory list, so it is per server instance and resets on restart. The log lines are the durable record
 
 ### Cloud & Infrastructure
 - Azure SQL with Transparent Data Encryption (TDE) and Managed Identity access
@@ -76,14 +82,27 @@ The application was subject to two rounds of independent testing:
 | Finding | Status |
 |---|---|
 | JWT stored in localStorage; role validation done client-side | Fixed - the session token lives only in an `httpOnly` cookie with `Secure` and `SameSite` flags. It is no longer returned in response bodies or kept in localStorage. Role checks on the server; the browser keeps only the email and role for display |
-| 2FA endpoint lacked rate limiting; user IDs enumerable via API | Partially addressed - rate limiting added; enumeration not fully resolved |
-| File upload bypass via `.php.jpg` extension and modified `Content-Type` headers | Partially addressed - server-side extension and MIME blocklist added; magic byte inspection not implemented |
+| 2FA endpoint lacked rate limiting; user IDs enumerable via API | Fixed in code - the 2FA endpoints no longer take a user ID from the request. The password step issues a short-lived signed cookie (`twofa_session`, 5 min, separate signing key, useless as a login session) that says which account the code is for. Failed codes are limited per account (5 per 15 minutes). Covered by automated tests |
+| File upload bypass via `.php.jpg` extension and modified `Content-Type` headers | Mostly addressed - allowlist of file types (replacing the blocklist), declared content type must match the extension, and after upload the server reads the start of the file and deletes it if it does not match (magic bytes for PDF, Office, JPG, PNG, GIF; text check for TXT, CSV, JSON, XML). Limit: uploads go straight to Blob Storage and the browser triggers the check, so a client that skips it is not checked. Closing that needs a storage-side scan (Event Grid + function, or Defender for Storage) |
 | WAF operating in detection mode rather than prevention mode | Fixed - WAF switched to prevention mode with 20+ custom rules |
 | IP-based rate limiting bypassed via VPN/Tor | Not fully addressed - requires IP intelligence services beyond project scope |
-| CSP uses `unsafe-inline` for `script-src` and `style-src` | Not fully addressed - nonce-based CSP not implemented |
-| Slow-rate directory enumeration not detected | Not addressed - requires behavioural anomaly detection |
+| CSP uses `unsafe-inline` for `script-src` and `style-src` | Partially addressed - all inline scripts moved to files and `script-src` is now `'self'` only. `style-src` still allows `unsafe-inline` |
+| Slow-rate directory enumeration not detected | Not addressed - requires behavioural anomaly detection. The new event log and brute-force alert cover sign-in and 2FA failures only |
 
 The full red team report is in the `/Documentation` folder.
+
+---
+
+## Tests
+
+```
+npm install
+npm test
+```
+
+The tests start the demo server and use real HTTP requests. They cover registration and login, the 2FA flow (including attempts to target another user), recovery codes, admin-only routes and forged cookies, upload rules, and the security event log.
+
+CI runs them with `npm run test --if-present` before deploy.
 
 ---
 

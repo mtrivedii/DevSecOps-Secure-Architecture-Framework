@@ -21,7 +21,6 @@ function getSqlPool() {
 }
 
 async function requireAdminDb(req, res, next) {
-  console.log('--- ADMIN DB MIDDLEWARE DEBUG ---');
   
   // Check for JWT token first
   const authToken = req.cookies?.auth_token;
@@ -29,11 +28,9 @@ async function requireAdminDb(req, res, next) {
     try {
       // Verify the JWT token
       const decodedToken = jwt.verify(authToken, process.env.JWT_SECRET); // Ensure JWT_SECRET is set in your environment
-      console.log('JWT token found and verified:', decodedToken);
       
       // Check if user has admin role in the token
       if (decodedToken.role?.toLowerCase() === 'admin') {
-        console.log('Admin access granted via JWT token');
         req.userRole = decodedToken.role;
         return next();
       }
@@ -47,14 +44,11 @@ async function requireAdminDb(req, res, next) {
         
         // Modified query to check by email for JWT token users
         const query = 'SELECT Role FROM Users WHERE email = @email';
-        console.log(`Executing query: ${query} with email = ${decodedToken.email}`);
         
         const result = await request.query(query);
-        console.log('DB result:', JSON.stringify(result.recordset));
         
         const userRole = result.recordset[0]?.Role;
         if (userRole && userRole.trim().toLowerCase() === 'admin') {
-          console.log(`Admin access granted for JWT user ${decodedToken.email} via DB check`);
           req.userRole = userRole;
           return next();
         }
@@ -73,7 +67,6 @@ async function requireAdminDb(req, res, next) {
 
   // Rest of the Azure AD auth code remains unchanged
   const userInfo = extractUserInfo(req);
-  console.log('userInfo from Azure AD:', userInfo);
 
   if (
     !userInfo.isAuthenticated ||
@@ -92,12 +85,10 @@ async function requireAdminDb(req, res, next) {
     const request = pool.request();
     request.input('userId', sql.NVarChar, userInfo.userId);
 
-    console.log('Querying DB with AzureID:', userInfo.userId);
 
     const result = await request.query(
       'SELECT Role FROM Users WHERE AzureID = @userId'
     );
-    console.log('DB result:', result.recordset);
 
     const userRole = result.recordset[0]?.Role;
     if (!userRole) {
@@ -107,7 +98,6 @@ async function requireAdminDb(req, res, next) {
         .sendFile(path.join(__dirname, 'public', '401.html'));
     }
 
-    console.log('User role found:', userRole);
 
     if (userRole.trim().toLowerCase() !== 'admin') {
       console.warn('Forbidden: User is not admin (role:', userRole, ')');

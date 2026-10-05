@@ -45,12 +45,13 @@ app.use((req, res, next) => {
  res.setHeader(
    'Content-Security-Policy',
    "default-src 'self'; " +
-     "script-src 'self' 'unsafe-inline'; " +
+     "script-src 'self'; " +
      "style-src 'self' 'unsafe-inline'; " +
      "img-src 'self' data: https://api.qrserver.com; " +
      "connect-src 'self' https://*.blob.core.windows.net " +
      "https://*.microsoftonline.com https://login.microsoft.com " +
-     "https://maanit-func.azurewebsites.net"
+     "https://maanit-func.azurewebsites.net; " +
+     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
  );
  res.setHeader('X-Frame-Options', 'DENY');
  res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -124,12 +125,13 @@ app.use(express.static(path.join(__dirname, 'public'), {
      res.setHeader(
        'Content-Security-Policy',
        "default-src 'self'; " +
-         "script-src 'self' 'unsafe-inline'; " +
+         "script-src 'self'; " +
          "style-src 'self' 'unsafe-inline'; " +
          "img-src 'self' data: https://api.qrserver.com; " +
          "connect-src 'self' https://*.blob.core.windows.net " +
          "https://*.microsoftonline.com https://login.microsoft.com " +
-         "https://maanit-func.azurewebsites.net"
+         "https://maanit-func.azurewebsites.net; " +
+     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
      );
    }
    res.setHeader('X-Frame-Options', 'DENY');

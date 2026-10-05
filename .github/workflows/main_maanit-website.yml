@@ -42,7 +42,7 @@ jobs:
         run: |
           rm -rf mocks/
           rm -f server-dev.js
-          rm -rf dev/ infra/
+          rm -rf dev/ infra/ test/
 
       - name: Zip Artifact for Deployment
         run: zip -r release.zip ./

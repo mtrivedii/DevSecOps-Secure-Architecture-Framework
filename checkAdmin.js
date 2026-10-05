@@ -35,11 +35,9 @@ async function handler(req, res) {
     try {
       // Verify the JWT token
       const decodedToken = jwt.verify(authToken, process.env.JWT_SECRET); // Ensure JWT_SECRET is set in your environment
-      console.log('JWT token found and verified:', decodedToken);
       
       // Check if user has admin role in the token
       if (decodedToken.role?.toLowerCase() === 'admin') {
-        console.log(`Admin access granted for JWT user ${decodedToken.email}`);
         return res.status(200).json({ 
           message: 'Admin access granted',
           auth: 'JWT'
@@ -55,14 +53,11 @@ async function handler(req, res) {
         
         // Modified query to check by email for JWT token users
         const query = 'SELECT Role FROM Users WHERE email = @email';
-        console.log(`Executing query: ${query} with email = ${decodedToken.email}`);
         
         const result = await request.query(query);
-        console.log('Query result:', JSON.stringify(result.recordset));
         
         const userRole = result.recordset[0]?.Role;
         if (userRole && userRole.trim().toLowerCase() === 'admin') {
-          console.log(`Admin access granted for JWT user ${decodedToken.email} via DB check`);
           return res.status(200).json({ 
             message: 'Admin access granted',
             auth: 'JWT+DB'
@@ -88,7 +83,6 @@ async function handler(req, res) {
 
   // Rest of the Azure AD auth code remains unchanged
   const userInfo = extractUserInfo(req);
-  console.log(`adminCheck invoked. User ID: ${userInfo.userId || 'missing'}`);
 
   if (
     !userInfo.isAuthenticated ||
@@ -108,10 +102,8 @@ async function handler(req, res) {
     request.input('userId', sql.NVarChar, userInfo.userId);
 
     const query = 'SELECT Role FROM Users WHERE AzureID = @userId';
-    console.log(`Executing query: ${query} with userId = ${userInfo.userId}`);
 
     const result = await request.query(query);
-    console.log('Query result:', JSON.stringify(result.recordset));
 
     const userRole = result.recordset[0]?.Role;
     if (!userRole) {
@@ -121,9 +113,7 @@ async function handler(req, res) {
         .json({ error: 'Forbidden', details: 'User not found in database' });
     }
 
-    console.log(`User role found: ${userRole}`);
     if (userRole.trim().toLowerCase() === 'admin') {
-      console.log(`Admin access granted for user ${userInfo.userId}`);
       return res.status(200).json({ 
         message: 'Admin access granted',
         auth: 'Azure'
