@@ -199,8 +199,17 @@ function demoBlobMiddleware(req, res, next) {
     return;
   }
   if (req.method === 'GET' && req.path === '/demo-blob/') {
-    return res.json([...blobs.entries()].map(([name, b]) => ({ name, bytes: b.data.length, type: b.type })));
+    return res.json([...blobs.entries()].map(([name, b]) => ({ name, bytes: b.data.length, type: b.type, download: `/demo-blob/${encodeURI(name)}` })));
   }
+  if (req.method === 'GET' && blobs.has(key)) {
+    // Always download, never render, so an uploaded file cannot run in the browser.
+    const b = blobs.get(key);
+    res.setHeader('Content-Type', b.type);
+    res.setHeader('Content-Disposition', `attachment; filename="${key.split('/').pop().replace(/"/g, '')}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.end(b.data);
+  }
+  if (req.method === 'GET') return res.status(404).end();
   return res.status(405).end();
 }
 
