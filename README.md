@@ -87,6 +87,21 @@ The full red team report is in the `/Documentation` folder.
 
 ---
 
+## Run locally (demo)
+
+The application needs Azure SQL, Blob Storage and Managed Identity, so it cannot start on a laptop as it is. `dev/demo-server.js` runs the real application code against an in-memory database and fake Azure credentials:
+
+```
+npm install
+npm run demo
+```
+
+Open http://localhost:3000. A demo admin is created on start: `admin@example.com` / `Admin#Demo2026`. You can register users, set up TOTP 2FA and recovery codes, see the admin pages and the user directory, and request upload SAS URLs.
+
+This demonstrates the application logic only. Front Door, the WAF, TDE, Managed Identity and Log Analytics exist only in Azure. See `infra/` and `/Documentation` for those.
+
+---
+
 ## Infrastructure as code
 
 `infra/main.bicep` describes the Azure environment in Bicep: Front Door with a WAF policy, App Service (Linux, Node 20), Azure SQL with TDE and Entra-only auth, Blob Storage with a private container, Log Analytics and Application Insights. It uses the resource names from the Body of Knowledge.

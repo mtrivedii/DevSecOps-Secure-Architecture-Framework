@@ -7,7 +7,8 @@
     "dev": "nodemon server-dev.js",
     "test": "echo \"No tests yet...\"",
     "prestart": "node -e \"console.log('Checking environment...')\"",
-    "lint": "echo \"Add a linter for security validation\""
+    "lint": "echo \"Add a linter for security validation\"",
+    "demo": "node dev/demo-server.js"
   },
   "dependencies": {
     "@azure/identity": "^4.9.1",

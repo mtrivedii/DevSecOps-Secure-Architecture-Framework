@@ -86,10 +86,10 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   name: 'default'
 }
 
-// Private container. The backend hands out short-lived, write-only SAS URLs.
+// Private container (name matches getSasToken.js). The backend hands out short-lived, write-only SAS URLs.
 resource uploads 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
-  name: 'uploads'
+  name: 'secure-uploads'
   properties: {
     publicAccess: 'None'
   }
