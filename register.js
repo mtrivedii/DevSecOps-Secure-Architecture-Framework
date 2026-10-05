@@ -6,6 +6,8 @@ const sql = require('mssql');
 const bcrypt = require('bcrypt');
 const validator = require('validator');
 const { DefaultAzureCredential } = require('@azure/identity');
+const { setTwoFactorSession } = require('./session');
+const securityLog = require('./securityLog');
 
 // Singleton SQL connection pool using Managed Identity
 let sqlPool = null;
@@ -71,12 +73,13 @@ function validateRegistration(req, res, next) {
 
 // Rate limiting middleware
 const registrationAttempts = new Map();
+const REGISTRATION_LIMIT = parseInt(process.env.REGISTRATION_LIMIT, 10) || 5; // tests raise this
 function rateLimit(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   const attempts = registrationAttempts.get(ip) || [];
   const recentAttempts = attempts.filter(time => now - time < 600000);
-  if (recentAttempts.length >= 5) {
+  if (recentAttempts.length >= REGISTRATION_LIMIT) {
     return res.status(429).json({
       error: 'Too many registration attempts. Please try again later.'
     });
@@ -133,7 +136,10 @@ router.post('/', rateLimit, validateRegistration, async (req, res) => {
       .query(insertQuery);
 
     const userId = result.recordset[0].newId;
-    console.log(`User registered: ${normalizedEmail} (${userId})`);
+    securityLog.record('register.success', { req, email: normalizedEmail, userId });
+
+    // Lets this browser set up 2FA for the new account without a full login.
+    setTwoFactorSession(res, userId, 'setup');
 
     return res.status(201).json({
       message: 'Registration successful',

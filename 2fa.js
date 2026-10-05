@@ -6,6 +6,8 @@ const crypto = require('crypto');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const jwt = require('jsonwebtoken');
+const { getTwoFactorSession, getAuthSession, clearTwoFactorSession } = require('./session');
+const securityLog = require('./securityLog');
 
 // Singleton SQL connection pool
 let sqlPool = null;
@@ -23,12 +25,35 @@ async function getSqlPool() {
   return sqlPool;
 }
 
+// The user ID always comes from a signed cookie, never from the request body.
+// Setup: a signed-in user, or a browser that just registered.
+function setupUserId(req) {
+  const auth = getAuthSession(req);
+  if (auth && Number.isInteger(auth.userId)) return auth.userId;
+  return getTwoFactorSession(req, ['setup']);
+}
+
+// Limit wrong 2FA codes per account: 5 failures in 15 minutes, then wait.
+const failedCodes = new Map(); // userId -> number[] of failure times
+const CODE_WINDOW_MS = 15 * 60 * 1000;
+const CODE_MAX_FAILURES = 5;
+function codeLocked(userId) {
+  const now = Date.now();
+  const list = (failedCodes.get(userId) || []).filter(t => now - t < CODE_WINDOW_MS);
+  failedCodes.set(userId, list);
+  return list.length >= CODE_MAX_FAILURES;
+}
+function noteCodeFailure(userId) {
+  const list = failedCodes.get(userId) || [];
+  list.push(Date.now());
+  failedCodes.set(userId, list);
+}
+
 // Setup 2FA - Step 1: Generate secret and QR code
 router.post('/setup', async (req, res) => {
-  const { userId, email } = req.body;
-  
-  if (!userId || !email) {
-    return res.status(400).json({ error: 'User ID and email are required' });
+  const userId = setupUserId(req);
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
   
   try {
@@ -42,6 +67,7 @@ router.post('/setup', async (req, res) => {
     }
     
     const user = userResult.recordset[0];
+    const email = user.email;
     
     if (user.twoFactorEnabled) {
       return res.status(400).json({ error: '2FA is already enabled for this user' });
@@ -49,7 +75,7 @@ router.post('/setup', async (req, res) => {
     
     const secret = speakeasy.generateSecret({
       length: 20,
-      name: `SecureApp:${email}` // Consider using a more generic app name if configurable
+      name: `SecureApp:${email}`
     });
     
     await pool.request()
@@ -64,7 +90,7 @@ router.post('/setup', async (req, res) => {
     const otpauth_url = secret.otpauth_url;
     const qrCodeImage = await QRCode.toDataURL(otpauth_url);
     
-    console.log(`2FA setup initiated for user: ${email} (${userId})`);
+    securityLog.record('twofa.setup_started', { req, email, userId });
     
     return res.status(200).json({
       secret: secret.base32,
@@ -80,10 +106,18 @@ router.post('/setup', async (req, res) => {
 
 // Setup 2FA - Step 2: Verify and activate
 router.post('/verify', async (req, res) => {
-  const { userId, token: verificationTokenFromUser } = req.body; // Renamed for clarity
+  const userId = setupUserId(req);
+  const { token: verificationTokenFromUser } = req.body;
   
-  if (!userId || !verificationTokenFromUser) {
-    return res.status(400).json({ error: 'User ID and verification token are required' });
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!verificationTokenFromUser) {
+    return res.status(400).json({ error: 'Verification token is required' });
+  }
+  if (codeLocked(userId)) {
+    securityLog.record('rate_limit.exceeded', { req, userId, detail: '2FA activation codes', severity: 'medium' });
+    return res.status(429).json({ error: 'Too many wrong codes. Try again later.' });
   }
   
   try {
@@ -110,6 +144,8 @@ router.post('/verify', async (req, res) => {
     });
     
     if (!verified) {
+      noteCodeFailure(userId);
+      securityLog.record('twofa.failure', { req, email: user.email, userId, detail: 'activation code' });
       return res.status(401).json({ error: 'Invalid verification code' });
     }
     
@@ -136,7 +172,7 @@ router.post('/verify', async (req, res) => {
         WHERE id = @userId
       `);
     
-    console.log(`2FA activated for user: ${user.email} (${userId})`);
+    securityLog.record('twofa.enabled', { req, email: user.email, userId });
     
     return res.status(200).json({
       message: '2FA successfully activated',
@@ -152,10 +188,19 @@ router.post('/verify', async (req, res) => {
 
 // Login with 2FA (Validate 2FA code during login attempt)
 router.post('/validate', async (req, res) => {
-  const { userId, token: twoFactorTokenFromUser } = req.body; // Renamed for clarity
+  // Only a browser that just passed the password step has this cookie.
+  const userId = getTwoFactorSession(req, ['login']);
+  const { token: twoFactorTokenFromUser } = req.body;
   
-  if (!userId || !twoFactorTokenFromUser) {
-    return res.status(400).json({ error: 'User ID and 2FA token are required' });
+  if (!userId) {
+    return res.status(401).json({ error: 'Sign in with your password first.' });
+  }
+  if (!twoFactorTokenFromUser) {
+    return res.status(400).json({ error: '2FA token is required' });
+  }
+  if (codeLocked(userId)) {
+    securityLog.record('rate_limit.exceeded', { req, userId, detail: '2FA login codes', severity: 'medium' });
+    return res.status(429).json({ error: 'Too many wrong codes. Try again later.' });
   }
   
   try {
@@ -193,7 +238,7 @@ router.post('/validate', async (req, res) => {
                     WHERE id = @userId
                 `);
                 validated = true;
-                console.log(`2FA recovery code used for user: ${user.email} (${userId})`);
+                securityLog.record('twofa.recovery_used', { req, email: user.email, userId, severity: 'medium', detail: `${recoveryCodesList.length} recovery codes left` });
             }
         } catch (e) {
             console.error('Error parsing or using recovery codes during validation:', e.message, e.stack);
@@ -210,10 +255,14 @@ router.post('/validate', async (req, res) => {
     }
     
     if (!validated) {
+      noteCodeFailure(userId);
+      securityLog.record('twofa.failure', { req, email: user.email, userId, detail: 'login code' });
       return res.status(401).json({ error: 'Invalid verification code' });
     }
     
-    console.log(`2FA validation successful for user: ${user.email} (${userId})`);
+    failedCodes.delete(userId);
+    clearTwoFactorSession(res); // the step-one cookie is single use
+    securityLog.record('login.success', { req, email: user.email, userId, detail: 'password and 2FA' });
     
     const finalAuthToken = jwt.sign(
       { 
@@ -253,10 +302,19 @@ router.post('/validate', async (req, res) => {
 
 // Disable 2FA
 router.post('/disable', async (req, res) => {
-  const { userId, token: verificationTokenFromUser } = req.body; // Renamed for clarity
+  // Only a signed-in user can turn off their own 2FA, and they must give a valid code.
+  const auth = getAuthSession(req);
+  if (!auth || !Number.isInteger(auth.userId)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const userId = auth.userId;
+  const { token: verificationTokenFromUser } = req.body;
   
-  if (!userId) {
-    return res.status(400).json({ error: 'User ID is required' });
+  if (!verificationTokenFromUser) {
+    return res.status(400).json({ error: 'A current 2FA code is required to disable 2FA' });
+  }
+  if (codeLocked(userId)) {
+    return res.status(429).json({ error: 'Too many wrong codes. Try again later.' });
   }
   
   try {
@@ -275,21 +333,17 @@ router.post('/disable', async (req, res) => {
     
     const user = secretResult.recordset[0];
     
-    // If token is provided for verification before disabling, verify it
-    if (verificationTokenFromUser) {
-      const verified = speakeasy.totp.verify({
-        secret: user.twoFactorSecret,
-        encoding: 'base32',
-        token: verificationTokenFromUser,
-        window: 1
-      });
-      
-      if (!verified) {
-        return res.status(401).json({ error: 'Invalid verification code for disabling 2FA' });
-      }
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: verificationTokenFromUser,
+      window: 1
+    });
+    if (!verified) {
+      noteCodeFailure(userId);
+      securityLog.record('twofa.failure', { req, email: user.email, userId, detail: 'disable code' });
+      return res.status(401).json({ error: 'Invalid verification code for disabling 2FA' });
     }
-    // If no token is provided, it implies disabling without current code (e.g., admin action or after recovery)
-    // Add appropriate authorization checks here if this path needs to be more secure.
     
     await pool.request()
       .input('userId', sql.Int, userId)
@@ -303,7 +357,7 @@ router.post('/disable', async (req, res) => {
         WHERE id = @userId
       `);
     
-    console.log(`2FA disabled for user: ${user.email} (${userId})`);
+    securityLog.record('twofa.disabled', { req, email: user.email, userId, severity: 'medium' });
     
     // Clear the auth_token cookie if the user is disabling their own 2FA and should be logged out
     // or forced to re-authenticate under new (non-2FA) terms.
@@ -322,12 +376,12 @@ router.post('/disable', async (req, res) => {
 });
 
 // Check 2FA status
-router.get('/status/:userId', async (req, res) => {
-  const userIdParam = req.params.userId; // Renamed to avoid conflict
-  
-  if (!userIdParam) {
-    return res.status(400).json({ error: 'User ID parameter is required' });
+router.get('/status', async (req, res) => {
+  const auth = getAuthSession(req);
+  if (!auth || !Number.isInteger(auth.userId)) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
+  const userIdParam = auth.userId;
   
   try {
     const pool = await getSqlPool();

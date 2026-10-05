@@ -6,6 +6,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 // Assuming DefaultAzureCredential is used for DB connection based on original login.js
 const { DefaultAzureCredential } = require('@azure/identity');
+const { setTwoFactorSession } = require('./session');
+const securityLog = require('./securityLog');
 
 // Singleton SQL connection pool using Managed Identity
 let sqlPool = null;
@@ -65,7 +67,7 @@ function rateLimit(req, res, next) {
   
   // Log increased from 5 to 10 as per original, consider lower for production
   if (recentAttempts.length >= 10) { 
-    console.log(`[RATE LIMIT] Limit exceeded for IP: ${ip}`);
+    securityLog.record('rate_limit.exceeded', { req, detail: 'login attempts', severity: 'medium' });
     return res.status(429).json({ 
       error: 'Too many login attempts from this IP. Please try again later.' 
     });
@@ -100,7 +102,7 @@ router.post('/login', rateLimit, async (req, res) => {
       .query(query);
     
     if (result.recordset.length === 0) {
-      console.log(`[LOGIN] Failed: User not found - ${email}`);
+      securityLog.record('login.failure', { req, email, detail: 'unknown account' });
       await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 500)); // Timing attack mitigation
       return res.status(401).json({ error: 'Invalid email or password.' }); // Generic message
     }
@@ -109,14 +111,14 @@ router.post('/login', rateLimit, async (req, res) => {
     console.log(`[LOGIN] User found: ${user.email}, Role: ${user.Role}, Status: ${user.status}, 2FA Enabled: ${user.twoFactorEnabled}`);
     
     if (user.status !== 'Active') {
-      console.log(`[LOGIN] Login attempt for inactive/locked account: ${user.email}, Status: ${user.status}`);
+      securityLog.record('login.failure', { req, email: user.email, userId: user.id, detail: `account status ${user.status}`, severity: 'medium' });
       return res.status(401).json({ error: `Account is ${user.status.toLowerCase()}. Please contact support.` });
     }
     
     const passwordMatch = await bcrypt.compare(password, user.password);
     
     if (!passwordMatch) {
-      console.log(`[LOGIN] Failed: Invalid password for user - ${user.email}`);
+      securityLog.record('login.failure', { req, email: user.email, userId: user.id, detail: 'wrong password' });
       trackUserLoginAttempts(user.email); // Track failed attempts for this specific user
       await new Promise(resolve => setTimeout(resolve, Math.random() * 500 + 500)); // Timing attack mitigation
       return res.status(401).json({ error: 'Invalid email or password.' }); // Generic message
@@ -127,8 +129,10 @@ router.post('/login', rateLimit, async (req, res) => {
     loginAttempts.delete(req.ip || req.connection?.remoteAddress || 'unknown-ip');
 
     if (user.twoFactorEnabled) {
-      console.log(`[LOGIN] 2FA required for user: ${user.email}. Client will be redirected.`);
-      // DO NOT set the final auth_token cookie here. It will be set after successful 2FA.
+      // DO NOT set the final auth_token cookie here. It is set after a successful 2FA check.
+      // The short-lived signed cookie tells /api/2fa/validate who just passed the password step.
+      setTwoFactorSession(res, user.id, 'login');
+      securityLog.record('login.2fa_required', { req, email: user.email, userId: user.id });
       return res.status(200).json({
         requireTwoFactor: true,
         userId: user.id.toString(), // Send as string if client expects that
@@ -148,7 +152,7 @@ router.post('/login', rateLimit, async (req, res) => {
       { expiresIn: '1h' }
     );
     
-    console.log(`[LOGIN] User successfully logged in (non-2FA path): ${user.email} (ID: ${user.id})`);
+    securityLog.record('login.success', { req, email: user.email, userId: user.id, detail: 'password only' });
     
     // <<< SET PRODUCTION-READY COOKIE >>>
     res.cookie('auth_token', sessionToken, {

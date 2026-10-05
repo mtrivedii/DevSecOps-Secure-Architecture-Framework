@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch dev/demo-server.js",
-    "test": "echo \"No tests yet...\"",
+    "test": "node --test",
     "prestart": "node -e \"console.log('Checking environment...')\"",
     "lint": "echo \"Add a linter for security validation\"",
     "demo": "node dev/demo-server.js"
