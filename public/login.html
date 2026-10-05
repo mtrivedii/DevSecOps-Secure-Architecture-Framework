@@ -161,40 +161,9 @@
               return;
             }
             
-            // Store auth token in localStorage for JWT-based authentication
-            if (data.token) {
-              // FIXING HERE - Save the token to localStorage
-              debugLog(`Token received: ${data.token.substring(0, 20)}...`);
-              localStorage.setItem('auth_token', data.token);
-              debugLog('Token stored in localStorage ✅');
-              
-              // Also decode token to check its contents
-              try {
-                const tokenParts = data.token.split('.');
-                if (tokenParts.length === 3) {
-                  const payload = JSON.parse(atob(tokenParts[1]));
-                  debugLog(`Token payload: ${JSON.stringify(payload)}`);
-                  
-                  // Store user info from token
-                  if (payload.email) localStorage.setItem('user_email', payload.email);
-                  if (payload.role) localStorage.setItem('user_role', payload.role);
-                }
-              } catch (e) {
-                debugLog(`Error decoding token: ${e.message}`);
-              }
-            } else {
-              debugLog('⚠️ No token in response!');
-              
-              // Try to extract from cookie (fallback)
-              const tokenMatch = document.cookie.match(/auth_token=([^;]+)/);
-              if (tokenMatch && tokenMatch[1]) {
-                debugLog('Found token in cookie');
-                localStorage.setItem('auth_token', tokenMatch[1]);
-                debugLog('Token from cookie stored in localStorage');
-              } else {
-                debugLog('⚠️ No token found in response or cookies');
-              }
-            }
+            // The session lives in the httpOnly auth_token cookie set by the server.
+            // Remove any token left in localStorage by older versions of this page.
+            localStorage.removeItem('auth_token');
             
             // Store user info if available
             if (data.user) {

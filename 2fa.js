@@ -238,7 +238,11 @@ router.post('/validate', async (req, res) => {
       message: '2FA authentication successful',
       userId: user.id, // Or convert to string if client expects string userId
       email: user.email,
-      token: finalAuthToken // Send in body for localStorage on client
+      user: {
+        id: user.id.toString(),
+        email: user.email,
+        role: user.Role
+      }
     });
     
   } catch (error) {

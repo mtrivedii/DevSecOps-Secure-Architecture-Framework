@@ -25,18 +25,14 @@
         return null;
       };
       
-      const token = localStorage.getItem('auth_token');
+      // Display hints only. The auth cookie is httpOnly and the server enforces access.
+      const userEmail = localStorage.getItem('user_email');
       const userRole = localStorage.getItem('user_role');
-      const cookieToken = getCookie('auth_token');
-      
-      console.log("LocalStorage Token:", token ? "exists" : "none");
-      console.log("Cookie Token:", cookieToken ? "exists" : "none");
-      console.log("User role:", userRole || "none");
       
       const container = document.getElementById('content-container');
       
       // If authenticated as admin, show admin page
-      if ((token || cookieToken) && userRole && userRole.toLowerCase() === 'admin') {
+      if (userEmail && userRole && userRole.toLowerCase() === 'admin') {
         container.innerHTML = `
           <div class="container">
             <h1>🔐 Admin Control Panel</h1>
@@ -70,11 +66,13 @@
         `;
         
         // Add logout functionality
-        document.getElementById('logout-button').addEventListener('click', function() {
+        document.getElementById('logout-button').addEventListener('click', async function() {
           localStorage.removeItem('auth_token');
           localStorage.removeItem('user_role');
           localStorage.removeItem('user_email');
-          document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+          try {
+            await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+          } catch (e) {}
           window.location.href = '/';
         });
       } 

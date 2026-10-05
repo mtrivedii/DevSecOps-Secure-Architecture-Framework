@@ -148,20 +148,13 @@
             throw new Error(data.error || 'Failed to verify code');
           }
           
-          // Check for token in response and store it
-          if (data.token) {
-            debugLog(`Token received: ${data.token.substring(0, 20)}...`);
-            localStorage.setItem('auth_token', data.token);
-            debugLog('Token stored in localStorage ✅');
-            
-            // Also store user info
-            localStorage.setItem('user_email', data.email);
-            if (data.role) {
-              localStorage.setItem('user_role', data.role);
-              debugLog(`User role stored: ${data.role}`);
-            }
-          } else {
-            debugLog('⚠️ No token received from server after 2FA verification');
+          // The session is the httpOnly auth_token cookie set by the server.
+          // Keep only display info (email and role) for the UI. The server enforces access.
+          localStorage.removeItem('auth_token');
+          if (data.user) {
+            localStorage.setItem('user_email', data.user.email);
+            localStorage.setItem('user_role', data.user.role || 'user');
+            debugLog(`User info stored: ${data.user.email}`);
           }
           
           // Clear temporary 2FA auth data
@@ -228,20 +221,13 @@
             throw new Error(data.error || 'Failed to verify recovery code');
           }
           
-          // Store token if available
-          if (data.token) {
-            debugLog(`Token received: ${data.token.substring(0, 20)}...`);
-            localStorage.setItem('auth_token', data.token);
-            debugLog('Token stored in localStorage ✅');
-            
-            // Also store user info
-            localStorage.setItem('user_email', data.email);
-            if (data.role) {
-              localStorage.setItem('user_role', data.role);
-              debugLog(`User role stored: ${data.role}`);
-            }
-          } else {
-            debugLog('⚠️ No token received from server after recovery code verification');
+          // The session is the httpOnly auth_token cookie set by the server.
+          // Keep only display info (email and role) for the UI. The server enforces access.
+          localStorage.removeItem('auth_token');
+          if (data.user) {
+            localStorage.setItem('user_email', data.user.email);
+            localStorage.setItem('user_role', data.user.role || 'user');
+            debugLog(`User info stored: ${data.user.email}`);
           }
           
           // Clear temporary 2FA auth data

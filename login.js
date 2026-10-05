@@ -176,7 +176,6 @@ router.post('/login', rateLimit, async (req, res) => {
     
     return res.status(200).json({
       message: 'Login successful',
-      token: sessionToken, 
       user: {
         id: user.id.toString(), // Send as string if client expects that
         email: user.email,
@@ -188,6 +187,17 @@ router.post('/login', rateLimit, async (req, res) => {
     console.error('[LOGIN] Critical error during login process:', error.message, error.stack);
     return res.status(500).json({ error: 'An internal error occurred during login. Please try again later.' });
   }
+});
+
+// Logout: the auth cookie is httpOnly, so only the server can clear it
+router.post('/logout', (req, res) => {
+  res.clearCookie('auth_token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/'
+  });
+  return res.status(200).json({ message: 'Logged out' });
 });
 
 // Helper to track login attempts by user email (more targeted than IP for account health)

@@ -29,11 +29,13 @@
       console.log(`[index.html DEBUG] ${message}`);
     }
     
-    // Check token and update UI
+    // Check the stored session info and update the UI.
+    // The real session is the httpOnly auth_token cookie, which scripts cannot read.
+    // user_email and user_role are display hints only. The server enforces access.
     function checkToken() {
-      const token = localStorage.getItem('auth_token');
+      const email = localStorage.getItem('user_email');
+      const role = localStorage.getItem('user_role');
       
-      // Get references to DOM elements once
       const logoutButton = document.getElementById('logout-button');
       const loginLink = document.getElementById('login-link');
       const registerLink = document.getElementById('register-link');
@@ -44,82 +46,37 @@
       if(logoutButton) logoutButton.style.display = 'none';
       if(adminPanelLink) adminPanelLink.style.display = 'none';
       if(usersLink) usersLink.style.display = 'none';
-      if(loginLink) loginLink.style.display = 'inline-block'; // Or your default display
-      if(registerLink) registerLink.style.display = 'inline-block'; // Or your default display
+      if(loginLink) loginLink.style.display = 'inline-block';
+      if(registerLink) registerLink.style.display = 'inline-block';
       
-      if (token) {
-        debugLog('Found JWT in localStorage');
-        
-        // Attempt to show authenticated UI elements
+      if (email) {
+        debugLog('Found stored session info');
         if(logoutButton) logoutButton.style.display = 'inline-block';
         if(loginLink) loginLink.style.display = 'none';
         if(registerLink) registerLink.style.display = 'none';
         
-        try {
-          const parts = token.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1])); // Decode the payload
-            debugLog(`Token payload: userId=${payload.userId}, email=${payload.email}, role=${payload.role || 'none'}`);
-            
-            // Store/update user info in localStorage from the token's payload
-            // This ensures consistency if other pages (like login/2fa-verify) didn't set them fully.
-            if (payload.email) {
-              localStorage.setItem('user_email', payload.email);
-            } else {
-              localStorage.removeItem('user_email'); // Clear if not present
-            }
-
-            if (payload.role) {
-              localStorage.setItem('user_role', payload.role); // Set role from JWT
-            } else {
-              localStorage.removeItem('user_role'); // Clear role if not in token
-              debugLog('Role not found in token payload.');
-            }
-            
-            // Check if the role from the token is admin
-            if (payload.role && payload.role.toLowerCase() === 'admin') {
-              debugLog('Admin role detected in token, showing admin links');
-              if(adminPanelLink) adminPanelLink.style.display = 'inline-block';
-              if(usersLink) usersLink.style.display = 'inline-block';
-            } else {
-              // This else is important to explicitly hide admin links if not admin
-              debugLog('Not an admin role, ensuring admin links are hidden.');
-              if(adminPanelLink) adminPanelLink.style.display = 'none';
-              if(usersLink) usersLink.style.display = 'none';
-            }
-          } else {
-            // Invalid token structure
-            debugLog('Invalid JWT structure in localStorage. Clearing token and role.');
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('user_role');
-            localStorage.removeItem('user_email');
-            // UI will remain in default (non-authenticated) state due to the initial setup
-          }
-        } catch (e) {
-          // Error decoding token (e.g., malformed token, atob error)
-          debugLog(`Error decoding token: ${e.message}. Clearing token and role.`);
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user_email');
-          // UI will remain in default (non-authenticated) state
+        if (role && role.toLowerCase() === 'admin') {
+          debugLog('Admin role stored, showing admin links');
+          if(adminPanelLink) adminPanelLink.style.display = 'inline-block';
+          if(usersLink) usersLink.style.display = 'inline-block';
         }
       } else {
-        debugLog('No auth token found in localStorage. Ensuring non-authenticated UI.');
-        // UI is already set to default non-authenticated state from above
+        debugLog('No stored session info. Showing non-authenticated UI.');
       }
     }
     
     // Handle logout
-    function logout() {
+    async function logout() {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_role');
       localStorage.removeItem('user_email');
-      // Also attempt to clear any relevant cookies, though server should ideally invalidate session/token
-      document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax'; 
-      
-      debugLog('Logged out - session items cleared from localStorage and attempted cookie clear.');
-      
-      // Reload page to reflect logged-out state and re-run checkToken
+      try {
+        // The auth cookie is httpOnly, so the server has to clear it
+        await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+      } catch (e) {
+        debugLog(`Logout request failed: ${e.message}`);
+      }
+      debugLog('Logged out - stored session info cleared and cookie cleared by server.');
       window.location.reload();
     }
     
