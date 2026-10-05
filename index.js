@@ -11,8 +11,7 @@ const usersRouter = require('./users');
 const twoFARouter = require('./2fa');
 const registerRouter = require('./register'); 
 const loginRouter = require('./login');
-const { isMfaEnabled } = require('./mfaUtils');
-const requireAdminDb = require('./requireAdminDb');
+const requireAdminDb = require('./requireAdminDB');
 
 const app = express();
 
@@ -62,8 +61,8 @@ app.use((req, res, next) => {
 
 // Debug logger
 app.use((req, res, next) => {
- console.log(`[DEBUG] ${req.method} ${req.url} — IP: ${req.ip}`);
- console.log('[DEBUG] Headers:', req.headers);
+ // Do not log headers: they carry the session cookie and the Authorization header.
+ console.log(`[DEBUG] ${req.method} ${req.url} - IP: ${req.ip}`);
  next();
 });
 

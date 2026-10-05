@@ -2,7 +2,26 @@
 
 const express = require('express');
 const sql = require('mssql');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
+
+// Only signed-in admins may list users. The role comes from the signed session cookie.
+function requireAdminSession(req, res, next) {
+  const token = req.cookies?.auth_token;
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (!payload.role || String(payload.role).trim().toLowerCase() !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    req.sessionUser = payload;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+}
 
 // Singleton SQL connection pool
 let sqlPool = null;
@@ -36,7 +55,7 @@ async function getSqlPool() {
 }
 
 // GET /api/users - returns all users
-router.get('/users', async (req, res) => {
+router.get('/users', requireAdminSession, async (req, res) => {
   try {
     const pool = await getSqlPool();
     

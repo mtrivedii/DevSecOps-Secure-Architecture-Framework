@@ -20,8 +20,7 @@ function getSqlPool() {
 }
 
 async function handler(req, res) {
-  console.log('Request headers:', JSON.stringify(req.headers));
-  console.log('Request cookies:', JSON.stringify(req.cookies));
+  // Headers and cookies are not logged: they carry the session token.
 
   // --- JWT extraction from cookie or Authorization header ---
   let authToken = req.cookies?.auth_token;
