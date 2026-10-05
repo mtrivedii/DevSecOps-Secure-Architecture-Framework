@@ -75,7 +75,7 @@ The application was subject to two rounds of independent testing:
 
 | Finding | Status |
 |---|---|
-| JWT stored in localStorage; role validation done client-side | Fixed - tokens moved to `httpOnly` cookies with `Secure` and `SameSite` flags |
+| JWT stored in localStorage; role validation done client-side | Fixed - the session token lives only in an `httpOnly` cookie with `Secure` and `SameSite` flags. It is no longer returned in response bodies or kept in localStorage. Role checks on the server; the browser keeps only the email and role for display |
 | 2FA endpoint lacked rate limiting; user IDs enumerable via API | Partially addressed - rate limiting added; enumeration not fully resolved |
 | File upload bypass via `.php.jpg` extension and modified `Content-Type` headers | Partially addressed - server-side extension and MIME blocklist added; magic byte inspection not implemented |
 | WAF operating in detection mode rather than prevention mode | Fixed - WAF switched to prevention mode with 20+ custom rules |
@@ -84,6 +84,14 @@ The application was subject to two rounds of independent testing:
 | Slow-rate directory enumeration not detected | Not addressed - requires behavioural anomaly detection |
 
 The full red team report is in the `/Documentation` folder.
+
+---
+
+## Infrastructure as code
+
+`infra/main.bicep` describes the Azure environment in Bicep: Front Door with a WAF policy, App Service (Linux, Node 20), Azure SQL with TDE and Entra-only auth, Blob Storage with a private container, Log Analytics and Application Insights. It uses the resource names from the Body of Knowledge.
+
+It was reconstructed from the architecture documentation after the Azure resources were decommissioned, because the original environment was built in the portal. It compiles with `az bicep build --file infra/main.bicep`, but it has not been deployed. The WAF policy shows the structure with four representative custom rules. The deployed policy had 20+.
 
 ---
 
