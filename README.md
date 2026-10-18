@@ -102,7 +102,9 @@ npm test
 
 The tests start the demo server and use real HTTP requests. They cover registration and login, the 2FA flow (including attempts to target another user), recovery codes, admin-only routes and forged cookies, upload rules, and the security event log.
 
-CI runs them with `npm run test --if-present` before deploy.
+CI runs them on every push and pull request, together with CodeQL, `npm audit` (fails on high or critical in production dependencies) and a check that `infra/main.bicep` compiles. The deploy job is manual only, because the Azure resources are gone. Dependabot opens weekly update pull requests.
+
+Known open item: `npm audit` still lists three moderate findings (`mssql` through `tedious` and `sprintf-js`, a denial-of-service issue). The fix is a major version bump of `mssql`, which I have not made because the database code cannot be tested here without Azure SQL.
 
 ---
 
